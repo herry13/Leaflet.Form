@@ -20,6 +20,10 @@ L.Control.Form = L.Control.extend({
         initData: undefined
     },
 
+    get: function() {
+        $('#' + this.options.id);
+    },
+
     initialize: function (options) {
         L.Util.setOptions(this, options || {});
         var self = this;
@@ -28,13 +32,20 @@ L.Control.Form = L.Control.extend({
         self.listeners = {};
         // disable map click/drag event propagation
         L.DomEvent.disableClickPropagation(L.DomUtil.get(self.options.id));
+        // resize window if width/height defined
+        if (self.options.width) {
+            $(self.options.eid).css('width', self.options.width + 'px');
+        }
+        if (self.options.height) {
+            $(self.options.eid).css('height', self.options.height + 'px');
+        }
         // close the popup when close button is clicked
         $(self.options.eid + ' > .btn-close-popup').click(function() {
             $(self.options.eid).hide();
             self._fireEvent(self.eventType.hide);
         });
         // do submit when submit button is clicked
-        $(self.options.eid + ' > button').click(function() {
+        $(self.options.eid + ' > button.submit').click(function() {
             self.submit();
         });
         // centering the popup window
@@ -45,18 +56,15 @@ L.Control.Form = L.Control.extend({
         // implement regular expression validator for each input
         $(self.options.eid + ' > input').keyup(function(e) {
             $(e.target).removeClass();
-            var val = $(e.target).val();
+            var val = ($(e.target).prop('type') == 'checkbox' ? $(e.target).is(':checked') : $(e.target).val());
             var name = $(e.target).attr('name');
             var regexp = (self.options.regexp ? self.options.regexp[name] : undefined);
             self.options.data[name] = val;  // save the value
-            if (val.length > 0) {
-                if (regexp) {
-                    if ((typeof regexp === 'object' && regexp.test(val)) ||
-                            (typeof regexp === 'function' && regexp.length >= 1 && regexp(val))) {
-                        $(e.target).addClass('valid');
-                    } else {
-                        $(e.target).addClass('invalid');
-                    }
+
+            if ((typeof regexp === 'object' && regexp.test(val)) ||
+                    (typeof regexp === 'function' && regexp.length >= 1 && regexp(val))) {
+                if (val.length > 0) {
+                    $(e.target).addClass('valid');
                 }
             } else if (regexp) {
                 $(e.target).addClass('invalid');
@@ -78,7 +86,10 @@ L.Control.Form = L.Control.extend({
             this.options.mutex.active.hide();
         }
 
+        $('.splash').hide();
+
         $(this.options.eid + " > input").val("");
+        $(this.options.eid + " > input[type=checkbox]").attr('checked', false);
         $(this.options.eid + " > input").removeClass();
         for (var name in this.options.initData) {
             $(this.options.eid + " > input[name='" + name + "']").val(this.options.initData[name]);
@@ -127,25 +138,42 @@ L.Control.Form = L.Control.extend({
             }
         }
 
+        if (!this.options.url || !this.options.method) {
+            this._submissionSuccess();
+            return;
+        }
+
         $.ajax({
             url: this.options.url,
             type: this.options.method,
             data: this.options.data,
             success: function() {
-                if (self.options.successMessage) {
-                    alert(self.options.successMessage);
+                if (typeof self.options.success === 'function') {
+                    if (self.options.success.length >= 1) {
+                        self.options.success(self.options.data);
+                    } else {
+                        self.options.success();
+                    }
                 }
-                self._fireEvent(self.eventType.submit);
-                $(self.options.eid).hide();
-                self._fireEvent(self.eventType.hide);
+                self._submissionSuccess();
             }
-        }).fail(function() {
-            if (self.errorMessage) {
-                alert(self.errorMessage);
+        }).fail(function(res) {
+            if (typeof self.options.fail === 'function') {
+                if (self.options.fail.length >= 1) {
+                    self.options.fail(res.responseJSON);
+                } else {
+                    self.options.fail();
+                }
             } else {
                 alert("Error.");
             }
         });
+    },
+
+    _submissionSuccess: function() {
+        this._fireEvent(this.eventType.submit);
+        $(this.options.eid).hide();
+        this._fireEvent(this.eventType.hide);
     },
 
     on: function (eventType, callback) {
